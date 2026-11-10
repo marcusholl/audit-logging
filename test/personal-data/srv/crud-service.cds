@@ -250,3 +250,32 @@ service CRUD_7 {
     url @PersonalData.IsPotentiallyPersonal;
   };
 }
+
+// Regression service for the spurious to-many parent up-walk bug.
+// SpuriousRef is an unannotated entity with a proper reciprocal to-many into
+// CustomerPostalAddress.  SpuriousRefGroup (the next hop the walk would need)
+// is intentionally NOT projected, so a subselect built for the SpuriousRef
+// branch would crash the db-service infer layer.
+// The fix in _getUps skips unannotated parents when an annotated one exists,
+// so the walk proceeds only via Customers.addresses and resolves correctly.
+@path: '/crud-8'
+@requires: 'admin'
+service CRUD_8 {
+  entity Customers             as projection on db.Customers;
+  entity CustomerPostalAddress as projection on db.CustomerPostalAddress;
+  entity SpuriousRef           as projection on db.SpuriousRef;
+  // SpuriousRefGroup intentionally NOT projected.
+
+  annotate Customers with @PersonalData: {
+    EntitySemantics: 'DataSubject',
+    DataSubjectRole: 'Customer'
+  } {
+    ID @PersonalData.FieldSemantics: 'DataSubjectID';
+    emailAddress @PersonalData.IsPotentiallyPersonal;
+  };
+
+  annotate CustomerPostalAddress with @PersonalData: {EntitySemantics: 'DataSubjectDetails'} {
+    customer @PersonalData.FieldSemantics: 'DataSubjectID';
+    street @PersonalData.IsPotentiallySensitive;
+  };
+}

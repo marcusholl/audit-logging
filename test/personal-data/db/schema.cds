@@ -214,3 +214,26 @@ entity ThingAttachments : cuid {
   url      : String;
   thing    : Association to OwnedThings;
 }
+
+// Scenario: spurious to-many parent from an unannotated entity.
+// SpuriousRef holds a forward to-one into CustomerPostalAddress (making
+// SpuriousRef.addresses a proper reciprocal to-many on CustomerPostalAddress,
+// not a dangling association).  SpuriousRef carries NO @PersonalData annotations.
+// _getUps(CustomerPostalAddress) must skip it when at least one annotated
+// parent (Customers.addresses) is present; otherwise _buildSubSelect eagerly
+// constructs a subselect whose next hop (SpuriousRefGroup) is not projected,
+// causing an HTTP 500 on every sensitive read of CustomerPostalAddress.
+entity SpuriousRef : cuid {
+  group     : Association to SpuriousRefGroup;
+  addresses : Association to many CustomerPostalAddress
+                on addresses.spuriousRef = $self;
+}
+
+entity SpuriousRefGroup : cuid {
+  name : String;
+}
+
+// Back-link on CustomerPostalAddress that makes SpuriousRef.addresses proper.
+extend CustomerPostalAddress {
+  spuriousRef : Association to SpuriousRef;
+}

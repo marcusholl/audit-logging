@@ -2239,4 +2239,39 @@ describe("personal data audit logging in CRUD", () => {
       });
     });
   });
+
+  describe("_getUps skips spurious to-many parent from unannotated entity", () => {
+    // Regression for the up-walk bug: _getUps used to enumerate every inbound
+    // to-many association as a parent, including SpuriousRef.addresses which is
+    // a proper reciprocal to-many of CustomerPostalAddress.spuriousRef but
+    // carries no @PersonalData annotations.  _buildSubSelect would then try to
+    // navigate SpuriousRef → SpuriousRefGroup inside a service that does not
+    // project SpuriousRefGroup, causing the db-service infer layer to throw 500.
+    // Fix: _getUps now prefers annotated parents when at least one exists.
+
+    test("reading sensitive CustomerPostalAddress returns 200 and logs SensitiveDataRead", async () => {
+      const customerID = "bcd4a37a-6319-4d52-bb48-02fd06b9ffe9";
+      const addressID = "1ab71292-ef69-4571-8cfb-10b9d5d1459e";
+
+      const response = await GET(
+        `/crud-8/CustomerPostalAddress(${addressID})`,
+        { auth: ALICE }
+      );
+
+      expect(response.status).toBe(200);
+      expect(_logs.length).toBeGreaterThanOrEqual(1);
+      expect(_logs).toContainMatchObject({
+        data_subject: {
+          type: "CRUD_8.Customers",
+          role: "Customer",
+          id: { ID: customerID }
+        },
+        object: {
+          type: "CRUD_8.CustomerPostalAddress",
+          id: { ID: addressID }
+        },
+        attributes: [{ name: "street" }]
+      });
+    });
+  });
 });
